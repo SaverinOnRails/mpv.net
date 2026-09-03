@@ -11,7 +11,7 @@ namespace MpvNet.Native;
 public static class LibMpv
 {
     private const string LibraryName = "mpv";
-    
+
     [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
     public static extern nint mpv_create();
 
@@ -46,7 +46,14 @@ public static class LibMpv
     public static extern int mpv_set_option(nint mpvHandle, byte[] name, mpv_format format, ref long data);
 
     [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
-    public static extern int mpv_set_option_string(nint mpvHandle, byte[] name, byte[] value);
+    public static extern int mpv_set_option_string(
+       nint ctx,
+       [MarshalAs(UnmanagedType.LPStr)] string name,
+       [MarshalAs(UnmanagedType.LPStr)] string data
+   );
+
+    [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+    public static unsafe extern int mpv_render_context_render(nint ctx, MpvRenderParam* @params);
 
     [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
     public static extern mpv_error mpv_get_property(nint mpvHandle, byte[] name, mpv_format format, out nint data);
@@ -67,6 +74,13 @@ public static class LibMpv
     public static extern mpv_error mpv_observe_property(nint mpvHandle, ulong reply_userdata, [MarshalAs(UnmanagedType.LPUTF8Str)] string name, mpv_format format);
 
     [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+    public unsafe static extern int mpv_render_context_create(
+            out nint res,
+            nint mpv,
+            MpvRenderParam* @params
+        );
+
+    [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
     public static extern int mpv_unobserve_property(nint mpvHandle, ulong registered_reply_userdata);
 
     [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
@@ -77,6 +91,9 @@ public static class LibMpv
 
     [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
     public static extern mpv_error mpv_request_event(nint mpvHandle, mpv_event_id id, int enable);
+
+    [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern void mpv_render_context_set_update_callback(nint ctx, nint callback, nint callback_ctx);
 
     public enum mpv_error
     {
@@ -171,6 +188,45 @@ public static class LibMpv
         public mpv_log_level log_level;
     }
 
+    public enum mpv_render_param_type
+    {
+        MPV_RENDER_PARAM_INVALID = 0,
+        MPV_RENDER_PARAM_API_TYPE = 1,
+        MPV_RENDER_PARAM_OPENGL_INIT_PARAMS = 2,
+        MPV_RENDER_PARAM_OPENGL_FBO = 3,
+        MPV_RENDER_PARAM_FLIP_Y = 4,
+        MPV_RENDER_PARAM_DEPTH = 5,
+        MPV_RENDER_PARAM_ICC_PROFILE = 6,
+        MPV_RENDER_PARAM_AMBIENT_LIGHT = 7,
+        MPV_RENDER_PARAM_X11_DISPLAY = 8,
+        MPV_RENDER_PARAM_WL_DISPLAY = 9,
+        MPV_RENDER_PARAM_ADVANCED_CONTROL = 10,
+        MPV_RENDER_PARAM_NEXT_FRAME_INFO = 11,
+        MPV_RENDER_PARAM_BLOCK_FOR_TARGET_TIME = 12,
+        MPV_RENDER_PARAM_SKIP_RENDERING = 13,
+        MPV_RENDER_PARAM_DRM_DISPLAY = 14,
+        MPV_RENDER_PARAM_DRM_DRAW_SURFACE_SIZE = 15,
+        MPV_RENDER_PARAM_DRM_DISPLAY_V2 = 16,
+        MPV_RENDER_PARAM_SW_SIZE = 17,
+        MPV_RENDER_PARAM_SW_FORMAT = 18,
+        MPV_RENDER_PARAM_SW_STRIDE = 19,
+        MPV_RENDER_PARAM_SW_POINTER = 20,
+    };
+    [StructLayout(LayoutKind.Sequential)]
+    public unsafe struct MpvRenderParam
+    {
+        public mpv_render_param_type type;
+        public void* data;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MpvOpenGLFramebuffer
+    {
+        public int fbo;
+        public int width;
+        public int height;
+        public int internal_format;
+    }
     [StructLayout(LayoutKind.Sequential)]
     public struct mpv_event
     {
@@ -242,3 +298,19 @@ public static class LibMpv
 
     public static byte[] GetUtf8Bytes(string s) => Encoding.UTF8.GetBytes(s + "\0");
 }
+
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+public delegate nint MpvOpenglGetProcAddressCallback(
+    nint ctx,
+    [MarshalAs(UnmanagedType.LPStr)] string name
+);
+
+[StructLayout(LayoutKind.Sequential)]
+public struct MpvOpenglInitParams
+{
+    public nint get_proc_address;
+    public nint get_proc_address_ctx;
+}
+
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+public delegate void MpvRenderUpdateCallback(nint ctx);

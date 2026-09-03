@@ -16,7 +16,7 @@ using static MpvNet.Native.LibMpv;
 
 namespace MpvNet;
 
-public class MainPlayer : MpvClient
+public class MainPlayer : MpvClient, IGlEnabledPlayer
 {
     public string ConfPath { get => ConfigFolder + "mpv.conf"; }
     public string GPUAPI { get; set; } = "auto";
@@ -30,6 +30,7 @@ public class MainPlayer : MpvClient
 
     public bool Border { get; set; } = true;
     public bool FileEnded { get; set; }
+    private MpvRenderUpdateCallback? _renderUpdateCallback;
     public bool Fullscreen { get; set; }
     public bool IsQuitNeeded { set; get; } = true;
     public bool KeepaspectWindow { get; set; }
@@ -51,13 +52,14 @@ public class MainPlayer : MpvClient
     public float AutofitLarger { get; set; } = 0.8f;
 
     public AutoResetEvent ShutdownAutoResetEvent { get; } = new AutoResetEvent(false);
-    public nint MainHandle { get; set; }
     public List<MediaTrack> MediaTracks { get; set; } = new List<MediaTrack>();
     public List<TimeSpan> BluRayTitles { get; } = new List<TimeSpan>();
     public object MediaTracksLock { get; } = new object();
     public Size VideoSize { get; set; }
     public TimeSpan Duration;
     public List<MpvClient> Clients { get; } = new List<MpvClient>();
+
+    private MpvOpenglGetProcAddressCallback? _procAddressCallback;
 
     List<StringPair>? _audioDevices;
 
@@ -70,22 +72,22 @@ public class MainPlayer : MpvClient
     {
         App.ApplyShowMenuFix();
 
-        MainHandle = mpv_create();
-        Handle = MainHandle;
+        MpvContext = mpv_create();
+        Handle = MpvContext;
 
         var events = Enum.GetValues<mpv_event_id>().Cast<mpv_event_id>();
 
         foreach (mpv_event_id i in events)
         {
-            mpv_request_event(MainHandle, i, 0);
+            mpv_request_event(MpvContext, i, 0);
         }
 
-        mpv_request_log_messages(MainHandle, "no");
+        mpv_request_log_messages(MpvContext, "no");
 
         if (formHandle != IntPtr.Zero)
             TaskHelp.Run(MainEventLoop);
 
-        if (MainHandle == IntPtr.Zero)
+        if (MpvContext == IntPtr.Zero)
             throw new Exception("error mpv_create");
 
         if (App.IsTerminalAttached)
@@ -114,7 +116,7 @@ public class MainPlayer : MpvClient
         SetPropertyString("osc", "yes");
         SetPropertyString("config-dir", ConfigFolder);
         SetPropertyString("config", "yes");
-        
+
         UsedInputConfContent = App.InputConf.GetContent();
 
         if (!string.IsNullOrEmpty(UsedInputConfContent))
@@ -136,7 +138,7 @@ public class MainPlayer : MpvClient
 
         Environment.SetEnvironmentVariable("MPVNET_VERSION", AppInfo.Version.ToString());  // deprecated
 
-        mpv_error err = mpv_initialize(MainHandle);
+        mpv_error err = mpv_initialize(MpvContext);
 
         if (err < 0)
             throw new Exception("mpv_initialize error" + BR2 + GetError(err) + BR);
@@ -144,7 +146,7 @@ public class MainPlayer : MpvClient
         string idle = GetPropertyString("idle");
         App.Exit = idle == "no" || idle == "once";
 
-        Handle = mpv_create_client(MainHandle, "mpvnet");
+        Handle = mpv_create_client(MpvContext, "mpvnet");
 
         if (Handle == IntPtr.Zero)
             throw new Exception("mpv_create_client error");
@@ -162,7 +164,8 @@ public class MainPlayer : MpvClient
         SetPropertyString("user-data/frontend/version", AppInfo.Version.ToString());
         SetPropertyString("user-data/frontend/process-path", Environment.ProcessPath!);
 
-        ObservePropertyBool("pause", value => {
+        ObservePropertyBool("pause", value =>
+        {
             Paused = value;
             Pause?.Invoke();
         });
@@ -178,7 +181,8 @@ public class MainPlayer : MpvClient
             }
         });
 
-        ObservePropertyInt("playlist-pos", value => {
+        ObservePropertyInt("playlist-pos", value =>
+        {
             PlaylistPos = value;
             PlaylistPosChanged?.Invoke(value);
 
@@ -190,9 +194,139 @@ public class MainPlayer : MpvClient
         Initialized?.Invoke();
     }
 
+    //yes this is just copy and past of Init()
+    public void InitGl()
+    {
+        App.ApplyShowMenuFix();
+        MpvContext = mpv_create();
+        Handle = MpvContext;
+        var events = Enum.GetValues<mpv_event_id>().Cast<mpv_event_id>();
+        mpv_set_option_string(MpvContext, "vo", "libmpv");
+
+        foreach (mpv_event_id i in events)
+        {
+            mpv_request_event(MpvContext, i, 0);
+        }
+
+        mpv_request_log_messages(MpvContext, "no");
+
+        TaskHelp.Run(MainEventLoop);
+
+        if (MpvContext == IntPtr.Zero)
+            throw new Exception("error mpv_create");
+
+        if (App.IsTerminalAttached)
+        {
+            SetPropertyString("terminal", "yes");
+            SetPropertyString("input-terminal", "yes");
+        }
+
+        // if (formHandle != IntPtr.Zero)
+        // {
+        //     SetPropertyString("force-window", "yes");
+        //     SetPropertyLong("wid", formHandle.ToInt64());
+        // }
+
+        SetPropertyInt("osd-duration", 2000);
+
+        SetPropertyBool("input-default-bindings", true);
+        SetPropertyBool("input-builtin-bindings", false);
+        SetPropertyBool("input-media-keys", true);
+
+        SetPropertyString("autocreate-playlist", "filter");
+        SetPropertyString("media-controls", "yes");
+        SetPropertyString("idle", "yes");
+        SetPropertyString("screenshot-directory", "~~desktop/");
+        SetPropertyString("osd-playing-msg", "${media-title}");
+        SetPropertyString("osc", "yes");
+        SetPropertyString("config-dir", ConfigFolder);
+        SetPropertyString("config", "yes");
+
+        UsedInputConfContent = App.InputConf.GetContent();
+
+        if (!string.IsNullOrEmpty(UsedInputConfContent))
+            SetPropertyString("input-conf", @"memory://" + UsedInputConfContent);
+
+        if (true)
+            CommandLine.ProcessCommandLineArgsPreInit();
+
+        if (CommandLine.Contains("config-dir"))
+        {
+            string configDir = CommandLine.GetValue("config-dir");
+            string fullPath = System.IO.Path.GetFullPath(configDir);
+            App.InputConf.Path = fullPath.Separator + "input.conf";
+            string content = App.InputConf.GetContent();
+
+            if (!string.IsNullOrEmpty(content))
+                SetPropertyString("input-conf", @"memory://" + content);
+        }
+
+        Environment.SetEnvironmentVariable("MPVNET_VERSION", AppInfo.Version.ToString());  // deprecated
+
+        mpv_error err = mpv_initialize(MpvContext);
+
+        if (err < 0)
+            throw new Exception("mpv_initialize error" + BR2 + GetError(err) + BR);
+
+        string idle = GetPropertyString("idle");
+        App.Exit = idle == "no" || idle == "once";
+
+        Handle = mpv_create_client(MpvContext, "mpvnet");
+
+        if (Handle == IntPtr.Zero)
+            throw new Exception("mpv_create_client error");
+
+        mpv_request_log_messages(Handle, "info");
+
+        TaskHelp.Run(EventLoop);
+
+        // otherwise shutdown is raised before media files are loaded,
+        // this means Lua scripts that use idle might not work correctly
+        SetPropertyString("idle", "yes");
+
+        SetPropertyString("user-data/frontend/name", "mpv.net");
+        SetPropertyString("user-data/frontend/version", AppInfo.Version.ToString());
+        SetPropertyString("user-data/frontend/process-path", Environment.ProcessPath!);
+
+        ObservePropertyBool("pause", value =>
+        {
+            Paused = value;
+            Pause?.Invoke();
+        });
+
+        VideoRotate = GetPropertyInt("video-rotate");
+
+        ObservePropertyInt("video-rotate", value =>
+        {
+            if (VideoRotate != value)
+            {
+                VideoRotate = value;
+                UpdateVideoSize("dwidth", "dheight");
+            }
+        });
+
+        ObservePropertyInt("playlist-pos", value =>
+        {
+            PlaylistPos = value;
+            PlaylistPosChanged?.Invoke(value);
+
+            if (FileEnded && value == -1)
+                if (GetPropertyString("keep-open") == "no" && App.Exit)
+                    CommandV("quit");
+        });
+
+        Initialized?.Invoke();
+    }
+
+    private nint GetProcAddress(nint fn_ctx, [MarshalAs(UnmanagedType.LPStr)] string name)
+    {
+        //this should not be null
+        return GlGetProcAddress(name);
+    }
+
     public void Destroy()
     {
-        mpv_destroy(MainHandle);
+        mpv_destroy(MpvContext);
         mpv_destroy(Handle);
 
         foreach (var client in Clients)
@@ -243,8 +377,10 @@ public class MainPlayer : MpvClient
 
     string? _configFolder;
 
-    public string ConfigFolder {
-        get {
+    public string ConfigFolder
+    {
+        get
+        {
             if (_configFolder == null)
             {
                 string? mpvnet_home = Environment.GetEnvironmentVariable("MPVNET_HOME");
@@ -271,7 +407,8 @@ public class MainPlayer : MpvClient
 
     Dictionary<string, string>? _Conf;
 
-    public Dictionary<string, string> Conf {
+    public Dictionary<string, string> Conf
+    {
         get
         {
             if (_Conf != null)
@@ -340,7 +477,7 @@ public class MainPlayer : MpvClient
     {
         while (true)
         {
-            mpv_wait_event(MainHandle, -1);
+            mpv_wait_event(MpvContext, -1);
         }
     }
 
@@ -454,7 +591,7 @@ public class MainPlayer : MpvClient
 
             if (ext == "iso")
                 LoadISO(file);
-            else if(FileTypes.Subtitle.Contains(ext))
+            else if (FileTypes.Subtitle.Contains(ext))
                 CommandV("sub-add", file);
             else
             {
@@ -483,7 +620,7 @@ public class MainPlayer : MpvClient
     public void LoadISO(string path)
     {
         using var mi = new MediaInfo(path);
-        
+
         if (mi.GetGeneral("Format") == "ISO 9660 / DVD Video")
         {
             Command("stop");
@@ -636,8 +773,10 @@ public class MainPlayer : MpvClient
         }
     }
 
-    public List<StringPair> AudioDevices {
-        get {
+    public List<StringPair> AudioDevices
+    {
+        get
+        {
             if (_audioDevices != null)
                 return _audioDevices;
 
@@ -656,7 +795,8 @@ public class MainPlayer : MpvClient
         }
     }
 
-    public List<Chapter> GetChapters() {
+    public List<Chapter> GetChapters()
+    {
         List<Chapter> chapters = new List<Chapter>();
         int count = GetPropertyInt("chapter-list/count");
 
@@ -677,7 +817,7 @@ public class MainPlayer : MpvClient
     }
 
     public void UpdateExternalTracks()
-    { 
+    {
         int trackListTrackCount = GetPropertyInt("track-list/count");
         int editionCount = GetPropertyInt("edition-list/count");
         int count = MediaTracks.Where(i => i.Type != "g").Count();
@@ -1065,6 +1205,11 @@ public class MainPlayer : MpvClient
         }
     }
 
+    public nint MpvRenderContext { get; set; }
+    public nint MpvContext { get; set; }
+    public Func<string, nint> GlGetProcAddress { get; set; } = null!;
+    public Action GlViewDoRender { get; set; } = null!;
+
     public string GetProfiles()
     {
         string json = GetPropertyString("profile-list");
@@ -1098,7 +1243,7 @@ public class MainPlayer : MpvClient
 
     public MpvClient CreateNewPlayer(string name)
     {
-        var client = new MpvClient { Handle = mpv_create_client(MainHandle, name) };
+        var client = new MpvClient { Handle = mpv_create_client(MpvContext, name) };
 
         if (client.Handle == IntPtr.Zero)
             throw new Exception("Error CreateNewPlayer");
@@ -1107,4 +1252,63 @@ public class MainPlayer : MpvClient
         Clients.Add(client);
         return client;
     }
+
+    public void InitGlFrontend()
+    {
+        _procAddressCallback = GetProcAddress;
+        var initParams = new MpvOpenglInitParams
+        {
+            get_proc_address = Marshal.GetFunctionPointerForDelegate(_procAddressCallback),
+            get_proc_address_ctx = nint.Zero,
+        };
+
+        var enableAdvancedControl = 0;
+        byte[] managedParamApiType = Encoding.UTF8.GetBytes("opengl" + "\0");
+        unsafe
+        {
+            fixed (byte* paramApiType = managedParamApiType)
+            {
+                MpvRenderParam[] renderParams = {
+                new(){
+                    type = mpv_render_param_type.MPV_RENDER_PARAM_API_TYPE, data = (void*)paramApiType,
+                },
+                new() {
+                    type = mpv_render_param_type.MPV_RENDER_PARAM_OPENGL_INIT_PARAMS , data = &initParams
+                },
+                new() {
+                    type = mpv_render_param_type.MPV_RENDER_PARAM_ADVANCED_CONTROL ,
+                     data = &enableAdvancedControl
+                },
+                new()
+            };
+                fixed (MpvRenderParam* ParamPtr = &renderParams[0])
+                {
+                    nint mpv_gl;
+                    int status = mpv_render_context_create(
+                        out mpv_gl,
+                        Handle,
+                        ParamPtr
+                    );
+                    MpvRenderContext = mpv_gl;
+                    _renderUpdateCallback = _ =>
+                        {
+                            GlViewDoRender();
+                        };
+                    mpv_render_context_set_update_callback(
+                        MpvRenderContext,
+                        Marshal.GetFunctionPointerForDelegate(_renderUpdateCallback),
+                        nint.Zero);
+                }
+            }
+        }
+    }
+}
+
+public interface IGlEnabledPlayer
+{
+    public nint MpvRenderContext { get; set; }
+    public nint MpvContext { get; set; }
+    public void InitGlFrontend();
+    Func<string, nint> GlGetProcAddress { get; set; }
+    Action GlViewDoRender { get; set; }
 }

@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using MpvNet.Avalonia.Controls;
 
 namespace MpvNet.Avalonia.Views;
 
@@ -12,6 +13,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
+        Player.InitGl();
         Player.FileLoaded += Player_FileLoaded;
         Player.Pause += Player_Pause;
         Player.PlaylistPosChanged += Player_PlaylistPosChanged;
@@ -34,10 +36,6 @@ public partial class MainWindow : Window
     protected override async void OnLoaded(RoutedEventArgs e)
     {
         base.OnLoaded(e);
-        await Task.Delay(2000);
-        nint? handle = (this.TryGetPlatformHandle()?.Handle) ?? throw new Exception("Could not obtain native window handle");
-        Console.WriteLine(handle);
-        Player.Init(handle.Value, true);
     }
 
     private void Player_ClientMessage(string[] obj)

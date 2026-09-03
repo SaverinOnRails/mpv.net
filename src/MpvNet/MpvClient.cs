@@ -527,3 +527,5 @@ public class MpvClient
         Terminal.WriteError(GetError(err));
     }
 }
+
+
