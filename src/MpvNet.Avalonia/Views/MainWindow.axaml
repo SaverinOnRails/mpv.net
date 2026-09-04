@@ -22,8 +22,16 @@
     </Design.DataContext>
 
     <Grid RowDefinitions="Auto,*">
-        <Button Command="{Binding Start}" Content="Play"/>
-        <controls:MpvGlView Grid.Row="1" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" x:Name="mpvview" MpvPlayer="{Binding MpvPlayer}"/>
+        <Button Command="{Binding Start}" Content="Play" />
+        <Border
+            Grid.Row="1"
+            BorderBrush="Red"
+            BorderThickness="2">
+            <controls:MpvGlView
+                HorizontalAlignment="Stretch"
+                VerticalAlignment="Stretch"
+                MpvPlayer="{Binding MpvPlayer}" />
+        </Border>
     </Grid>
 
 </Window>

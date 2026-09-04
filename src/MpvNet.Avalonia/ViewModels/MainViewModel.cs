@@ -11,7 +11,7 @@ public partial class MainViewModel : ViewModelBase
 
     public void Start()
     {
-        var file = "/home/noble/Videos/wff-recordings/20260817_072419output.mkv";
+        var file = "/home/noble/Videos/wff-recordings/output.mp4";
         Player.LoadFiles([file], false, false);
     }
 }

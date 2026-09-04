@@ -234,11 +234,11 @@ public class MainPlayer : MpvClient, IGlEnabledPlayer
         SetPropertyBool("input-media-keys", true);
 
         SetPropertyString("autocreate-playlist", "filter");
-        SetPropertyString("media-controls", "yes");
+        // SetPropertyString("media-controls", "yes");
         SetPropertyString("idle", "yes");
         SetPropertyString("screenshot-directory", "~~desktop/");
         SetPropertyString("osd-playing-msg", "${media-title}");
-        SetPropertyString("osc", "yes");
+        // SetPropertyString("osc", "yes");
         SetPropertyString("config-dir", ConfigFolder);
         SetPropertyString("config", "yes");
 
@@ -1262,7 +1262,6 @@ public class MainPlayer : MpvClient, IGlEnabledPlayer
             get_proc_address_ctx = nint.Zero,
         };
 
-        var enableAdvancedControl = 0;
         byte[] managedParamApiType = Encoding.UTF8.GetBytes("opengl" + "\0");
         unsafe
         {
@@ -1276,8 +1275,8 @@ public class MainPlayer : MpvClient, IGlEnabledPlayer
                     type = mpv_render_param_type.MPV_RENDER_PARAM_OPENGL_INIT_PARAMS , data = &initParams
                 },
                 new() {
-                    type = mpv_render_param_type.MPV_RENDER_PARAM_ADVANCED_CONTROL ,
-                     data = &enableAdvancedControl
+                    type = mpv_render_param_type.MPV_RENDER_PARAM_INVALID,
+                     data = null
                 },
                 new()
             };

@@ -47,5 +47,6 @@ sealed class Program
             .WithDeveloperTools()
 #endif
             .WithInterFont()
+            .UseWaylandWithFallback()
             .LogToTrace();
 }

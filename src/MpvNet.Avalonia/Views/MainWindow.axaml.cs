@@ -23,9 +23,10 @@ public partial class MainWindow : Window
         Player.ClientMessage += Player_ClientMessage;
     }
 
+
     private void Player_VideoSizeChanged(System.Drawing.Size size)
     {
-        throw new NotImplementedException();
+        // throw new NotImplementedException();
     }
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
