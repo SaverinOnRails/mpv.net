@@ -16,6 +16,7 @@ sealed class Program
     [STAThread]
     public static void Main(string[] args)
     {
+        NativeLibrary.SetDllImportResolver(Assembly.GetExecutingAssembly(), DllImportResolver);
         StartAvaloniaApp(args);
     }
 
