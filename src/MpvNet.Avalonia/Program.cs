@@ -1,4 +1,5 @@
 ﻿using Avalonia;
+using Avalonia.Animation;
 using System;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -16,7 +17,7 @@ sealed class Program
     [STAThread]
     public static void Main(string[] args)
     {
-        NativeLibrary.SetDllImportResolver(Assembly.GetExecutingAssembly(), DllImportResolver);
+        NativeLibrary.SetDllImportResolver(typeof(MainPlayer).Assembly, DllImportResolver);
         StartAvaloniaApp(args);
     }
 
@@ -31,7 +32,7 @@ sealed class Program
             }
             else if (OperatingSystem.IsLinux())
             {
-                return NativeLibrary.Load("mpv");
+                return NativeLibrary.Load("libmpv.so");
             }
             else return nint.Zero;
         }
