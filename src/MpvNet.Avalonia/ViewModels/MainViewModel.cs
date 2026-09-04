@@ -11,7 +11,7 @@ public partial class MainViewModel : ViewModelBase
 
     public void Start()
     {
-        var file = "/home/noble/Videos/wff-recordings/output.mp4";
+        var file = "https://test-videos.co.uk/vids/bigbuckbunny/webm/vp9/360/Big_Buck_Bunny_360_10s_1MB.webm";
         Player.LoadFiles([file], false, false);
     }
 }
