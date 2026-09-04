@@ -14,9 +14,10 @@ public class MpvGlView : OpenGlControlBase
 		if (MpvPlayer?.MpvRenderContext is null or 0) return;
 		gl.ClearColor(0, 0, 0, 1);
 		gl.Clear(0x00004000);
-		var scaling = (VisualRoot as TopLevel)?.RenderScaling ?? 1.0;
-		var w = (int)(Bounds.Width * 1);
-		var h = (int)(Bounds.Height * 1);
+		var topLevel = TopLevel.GetTopLevel(this);
+		var scaling = topLevel?.RenderScaling ?? 1.0;
+		var w = (int)(Bounds.Width * scaling);
+		var h = (int)(Bounds.Height * scaling);
 		var flip_y = 1;
 		MpvOpenGLFramebuffer framebuffer = new() { fbo = fb, width = w, height = h };
 
